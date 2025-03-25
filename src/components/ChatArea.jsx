@@ -1,11 +1,16 @@
-import { useState } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Send, PanelLeft, PanelRight, Sliders, Download, ExternalLink, Wand2 } from "lucide-react";
+import { 
+  Loader2, Send, PanelLeft, PanelRight, Sliders, 
+  Download, ExternalLink, Wand2, Image as ImageIcon, 
+  FileText, FileArchive, X, Copy, Check,
+  Moon, Sun, Search, Filter, Info
+} from "lucide-react";
 
 const makeLinksClickable = (html) => {
   return html.replace(
     /<a\s+href="([^"]+)"(?![^>]*target=)/g,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">$1</a>'
   );
 };
 
@@ -28,37 +33,83 @@ export default function ChatArea({
   setImageStyle,
   imageStyleOptions,
   colorPalette,
-  onImageSelect,
   includeAI,
   setIncludeAI,
   addMessage
 }) {
-  // Function to handle Freepik AI image generation only
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [copiedColor, setCopiedColor] = useState(null);
+  const messagesContainerRef = useRef(null);
+
+  // Scroll to bottom effect
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // Input Validation and Enhancement
+  const isSubmitDisabled = () => {
+    if (loading) return true;
+    const trimmedInput = input.trim();
+    return trimmedInput.length === 0 || trimmedInput.length > 500;
+  };
+
+  // Tooltip Component for Advanced Explanations
+  const Tooltip = ({ content, children }) => {
+    const [isVisible, setIsVisible] = useState(false);
+
+    return (
+      <div className="relative inline-block">
+        <div 
+          onMouseEnter={() => setIsVisible(true)}
+          onMouseLeave={() => setIsVisible(false)}
+        >
+          {children}
+        </div>
+        {isVisible && (
+          <div className="absolute z-10 bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-800 text-white text-xs rounded-lg p-2 shadow-lg max-w-xs">
+            {content}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Enhanced Error and Guidance Handling
+  const renderInputFeedback = () => {
+    const trimmedInput = input.trim();
+    if (trimmedInput.length > 500) {
+      return (
+        <div className="text-red-400 text-xs ml-4 mt-1">
+          Input is too long (max 500 characters)
+        </div>
+      );
+    }
+    return null;
+  };
+
   const generateFreepikAIImage = async () => {
     if (!input.trim()) return;
     try {
-      // Call backend with ai=true to trigger only AI image generation
       const response = await fetch(
         `/search?q=${encodeURIComponent(input)}&ai=true`
       );
       const data = await response.json();
-      // Create a new bot message using only the AI image generation result
       const newMessage = {
         sender: "bot",
-        images: data.images, // Only AI images will be returned if ai=true
-        text: data.aiSuggestions, // Optionally show AI suggestions if available
+        images: data.images,
+        text: data.aiSuggestions,
         heading: data.heading,
         colorPalette: data.colorPalette,
       };
       addMessage(newMessage);
-      // Reset input after generating AI images
       setInput("");
     } catch (error) {
       console.error("Error generating Freepik AI image:", error);
     }
   };
 
-  // Handle submit: if includeAI toggle is enabled, run AI generation; otherwise, execute normal flow.
   const handleSubmit = () => {
     if (includeAI) {
       generateFreepikAIImage();
@@ -67,17 +118,42 @@ export default function ChatArea({
     }
   };
 
-  // Input field placeholder changes based on AI generation toggle
-  const placeholderText = includeAI
-    ? "Describe the AI image you want to generate..."
-    : "Describe the design you're looking for...";
+  const handleDownload = useCallback((image) => {
+    const link = document.createElement('a');
+    link.href = image.image;
+    
+    // Generate a more descriptive filename
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const sanitizedTitle = image.title 
+      ? image.title.replace(/[^a-z0-9]/gi, '_').toLowerCase() 
+      : 'inspoai_image';
+    
+    // Determine download details based on image type
+    if (image.format === 'vector') {
+      link.href = image.url;
+      link.download = `${sanitizedTitle}_vector_${timestamp}.svg`;
+    } else if (image.format === 'psd') {
+      link.href = image.url;
+      link.download = `${sanitizedTitle}_design_${timestamp}.psd`;
+    } else {
+      link.download = `${sanitizedTitle}_${timestamp}.jpg`;
+    }
 
-  // Format AI message - make links clickable
-  const formatAIMessage = (text) => {
-    return makeLinksClickable(text);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
+
+  const handleImagePreview = (image) => {
+    setSelectedImage(image);
   };
 
-  // Helper to render color palette swatches
+  const handleColorCopy = (color) => {
+    navigator.clipboard.writeText(color);
+    setCopiedColor(color);
+    setTimeout(() => setCopiedColor(null), 2000);
+  };
+
   const renderColorPalette = (colors) => {
     if (!colors || colors.length === 0) return null;
     return (
@@ -85,10 +161,17 @@ export default function ChatArea({
         {colors.map((color, index) => (
           <div key={index} className="flex flex-col items-center">
             <div 
-              className="w-12 h-12 rounded-full border border-gray-700 shadow-lg" 
+              className="w-12 h-12 rounded-full border border-gray-700 shadow-lg cursor-pointer hover:scale-110 transition-transform relative group" 
               style={{ backgroundColor: color }}
-              title={color}
-            ></div>
+              title={`Copy Color: ${color}`}
+              onClick={() => handleColorCopy(color)}
+            >
+              {copiedColor === color && (
+                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-green-600 text-white text-xs px-2 py-1 rounded-full">
+                  Copied!
+                </div>
+              )}
+            </div>
             <span className="text-xs mt-1 font-mono">{color}</span>
           </div>
         ))}
@@ -96,62 +179,16 @@ export default function ChatArea({
     );
   };
 
-  // Helper to render image formats with appropriate icons
-  const renderImageWithFormat = (image) => {
-    return (
-      <div className="relative group">
-        <img 
-          src={image.image} 
-          alt={image.title} 
-          className="rounded-lg object-cover w-full h-full"
-        />
-        {image.format && image.format !== 'image' && (
-          <div className="absolute top-2 right-2 bg-black bg-opacity-70 rounded-full px-2 py-1 text-xs font-bold">
-            {image.format.toUpperCase()}
-          </div>
-        )}
-        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-          <a 
-            href={image.url} 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="p-2 bg-white rounded-full mx-1"
-            title="View source"
-          >
-            <ExternalLink size={16} className="text-black" />
-          </a>
-          {(image.format === 'vector' || image.format === 'psd') && (
-            <a 
-              href={image.image} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              download
-              className="p-2 bg-white rounded-full mx-1"
-              title={`Download ${image.format.toUpperCase()}`}
-            >
-              <Download size={16} className="text-black" />
-            </a>
-          )}
-        </div>
-        {image.author && (
-          <div className="absolute bottom-2 left-2 right-2 text-xs bg-black bg-opacity-70 p-1 rounded truncate">
-            {image.author}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Modified rendering function for image grids with formats
   const renderFormatGrid = (images, categoryTitle) => {
     if (!images || images.length === 0) return null;
-    // Group images by category
+    
     const imagesByCategory = images.reduce((acc, img) => {
       const category = img.category || "Inspiration";
       if (!acc[category]) acc[category] = [];
       acc[category].push(img);
       return acc;
     }, {});
+
     return (
       <div className="space-y-6">
         {categoryTitle && (
@@ -170,10 +207,12 @@ export default function ChatArea({
                   key={idx} 
                   className={`${
                     moodboardLayout === "masonry" && idx % 3 === 0 ? "row-span-2" : ""
-                  } cursor-pointer hover:opacity-80 transition-opacity`}
-                  onClick={() => onImageSelect(image)}
+                  } relative group`}
                 >
-                  <div className="relative">
+                  <div 
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => handleImagePreview(image)}
+                  >
                     <img 
                       src={image.image} 
                       alt={image.title} 
@@ -190,6 +229,28 @@ export default function ChatArea({
                       </div>
                     )}
                   </div>
+                  <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex space-x-2">
+                      <button 
+                        onClick={() => handleDownload(image)}
+                        className="bg-white/20 hover:bg-white/40 p-1 rounded-full backdrop-blur-sm"
+                        title="Download"
+                      >
+                        <Download size={16} className="text-white" />
+                      </button>
+                      {image.url && (
+                        <a 
+                          href={image.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="bg-white/20 hover:bg-white/40 p-1 rounded-full backdrop-blur-sm"
+                          title="Open Original"
+                        >
+                          <ExternalLink size={16} className="text-white" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -199,6 +260,72 @@ export default function ChatArea({
     );
   };
 
+  // Image Preview Modal
+  const ImagePreviewModal = () => {
+    if (!selectedImage) return null;
+
+    return (
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4"
+        onClick={() => setSelectedImage(null)}
+      >
+        <div 
+          className="max-w-4xl max-h-[90vh] relative"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button 
+            onClick={() => setSelectedImage(null)}
+            className="absolute top-2 right-2 bg-white/20 hover:bg-white/40 p-2 rounded-full z-60"
+          >
+            <X size={24} className="text-white" />
+          </button>
+          
+          <img 
+            src={selectedImage.image} 
+            alt={selectedImage.title} 
+            className="max-w-full max-h-full object-contain rounded-lg"
+          />
+          
+          <div className="mt-4 text-center text-white space-x-4">
+            <button 
+              onClick={() => handleDownload(selectedImage)}
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-full inline-flex items-center"
+            >
+              <Download size={20} className="mr-2" /> Download
+            </button>
+            {selectedImage.url && (
+              <a 
+                href={selectedImage.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-full inline-flex items-center"
+              >
+                <ExternalLink size={20} className="mr-2" /> Open Original
+              </a>
+            )}
+          </div>
+          
+          {selectedImage.author && (
+            <div className="text-center text-gray-300 mt-2">
+              Author: {selectedImage.author}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Dynamic Placeholder Text
+  const getPlaceholderText = () => {
+    if (includeAI) {
+      return "Describe the AI image you want to generate (e.g., 'Futuristic cityscape at sunset')";
+    }
+    return "Describe the design you're looking for (e.g., 'Minimalist workspace design')";
+  };
+
+  const formatAIMessage = (text) => {
+    return makeLinksClickable(text);
+  };
 
   return (
     <div className="flex-1 flex flex-col h-full bg-gradient-to-b from-black to-gray-900">
@@ -230,7 +357,10 @@ export default function ChatArea({
       )}
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+      >
         {messages.map((msg, index) => (
           <motion.div
             key={index}
@@ -273,7 +403,6 @@ export default function ChatArea({
 
       {/* Input Container */}
       <div className="p-4 border-t border-gray-800 bg-black">
-        {/* Advanced Options */}
         <AnimatePresence>
           {showAdvancedOptions && (
             <motion.div
@@ -315,7 +444,6 @@ export default function ChatArea({
                   </div>
                 </div>
                 
-                {/* Toggle for Freepik AI Image Generation - Enhanced */}
                 <div className="mt-4 p-3 border border-blue-800 rounded-lg bg-blue-900 bg-opacity-20">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
@@ -354,53 +482,51 @@ export default function ChatArea({
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Quick Actions - Hide when in AI mode */}
-        {!includeAI && (
-          <div className="mb-2 flex flex-wrap justify-center gap-1">
-            <div className="inline-flex flex-wrap rounded-full bg-gray-900 p-1">
-              {relatedTerms.slice(0, 5).map((term, index) => (
-                <button
-                  key={index}
-                  className="px-3 py-1 text-xs rounded-full hover:bg-gray-800 transition-colors m-1"
-                  onClick={() => setInput((prev) => (prev ? `${prev} ${term}` : term))}
-                >
-                  {term}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Input + Send Button */}
+        
+        {/* Input Area */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder={placeholderText}
+              placeholder={getPlaceholderText()}
               className={`w-full bg-black text-white p-3 pl-10 rounded-full focus:ring-2 focus:ring-white placeholder-gray-500 resize-none h-12 max-h-32 min-h-12 border ${
                 includeAI ? "border-blue-600 focus:border-blue-400 focus:ring-blue-400" : "border-gray-800"
               }`}
+              maxLength={500}
             />
-            {includeAI && (
+            {includeAI ? (
               <Wand2 size={16} className="absolute left-4 top-3 text-blue-400" />
+            ) : (
+              <Filter size={16} className="absolute left-4 top-3 text-gray-500" />
             )}
           </div>
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className={`bg-gradient-to-r text-black p-3 rounded-full flex items-center justify-center disabled:opacity-50 ${
-              includeAI
-                ? "from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700"
-                : "from-white to-gray-500 hover:from-gray-500 hover:to-white"
-            }`}
+          <Tooltip 
+            content={
+              isSubmitDisabled() 
+                ? "Please enter a valid input (1-500 characters)" 
+                : "Send your request"
+            }
           >
-            {includeAI ? <Wand2 size={20} /> : <Send size={20} />}
-          </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitDisabled()}
+              className={`bg-gradient-to-r text-black p-3 rounded-full flex items-center justify-center disabled:opacity-50 ${
+                includeAI
+                  ? "from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700"
+                  : "from-white to-gray-500 hover:from-gray-500 hover:to-white"
+              }`}
+            >
+              {includeAI ? <Wand2 size={20} /> : <Send size={20} />}
+            </button>
+          </Tooltip>
         </div>
+        {renderInputFeedback()}
       </div>
+
+      {/* Image Preview Modal */}
+      {selectedImage && <ImagePreviewModal />}
     </div>
   );
 }
