@@ -57,7 +57,7 @@ export default function Dashboard() {
   const [showMoodboardPreview, setShowMoodboardPreview] = useState(false);
   const [moodboardLayout, setMoodboardLayout] = useState("grid");
   const [imageStyle, setImageStyle] = useState("natural");
-  const [apiEndpoint, setApiEndpoint] = useState("https://inspo-ai-backend.onrender.com");
+  const [apiEndpoint, setApiEndpoint] = useState("http://localhost:3000");
   const [assetTypes, setAssetTypes] = useState({
     images: true,
     vectors: false,
@@ -155,18 +155,18 @@ export default function Dashboard() {
   // Send user message + fetch data
   const sendMessage = async () => {
     if (!input.trim()) return;
-
+  
     // Combine design prefs with user input
     const userMessage = `${input}${
       industry ? ` | Industry: ${industry}` : ""
     }${font ? ` | Font: ${font}` : ""}${
       designStyle ? ` | Style: ${designStyle}` : ""
     }${selectedColor !== "#000000" ? ` | Color: ${selectedColor}` : ""}`;
-
+  
     setMessages((prev) => [...prev, { text: userMessage, sender: "user" }]);
     setInput("");
     setLoading(true);
-
+  
     try {
       // Build query parameters including asset types
       const queryParams = {
@@ -179,18 +179,18 @@ export default function Dashboard() {
         vectorType: assetTypes.vectors ? 'true' : 'false',
         psdType: assetTypes.psd ? 'true' : 'false'
       };
-
+  
       const response = await axios.get(`${apiEndpoint}/search`, {
         params: queryParams
       });
-
+  
       const { images, aiSuggestions, relatedTerms: terms, colorPalette: newPalette } = response.data;
-
+  
       // Update state with new data
       if (terms && terms.length) {
         setRelatedTerms(terms);
       }
-
+  
       // Extract and update color palette
       const extractedPalette = extractColorPalette(aiSuggestions);
       if (extractedPalette.length > 0) {
@@ -198,14 +198,14 @@ export default function Dashboard() {
       } else if (newPalette && newPalette.length > 0) {
         setColorPalette(newPalette);
       }
-
+  
       // Process and categorize images
       const processedImages = images.map(img => ({
         ...img,
         format: img.fileType || (img.url?.endsWith('.svg') ? 'vector' : 
                               img.url?.endsWith('.psd') ? 'psd' : 'image')
       }));
-
+  
       // Group images by category for better organization
       const groupedImages = {};
       processedImages.forEach(img => {
@@ -215,19 +215,8 @@ export default function Dashboard() {
         }
         groupedImages[category].push(img);
       });
-
-      // Add message with AI suggestions and color palette
-      setMessages(prev => [
-        ...prev, 
-        { 
-          text: aiSuggestions, 
-          sender: "bot",
-          colorPalette: extractedPalette.length > 0 ? extractedPalette : newPalette,
-          heading: "Design Suggestions"
-        }
-      ]);
-      
-      // Then add image groups as separate messages
+  
+      // First, add image groups as messages
       Object.entries(groupedImages).forEach(([category, imgs]) => {
         setMessages(prev => [
           ...prev, 
@@ -238,6 +227,17 @@ export default function Dashboard() {
           }
         ]);
       });
+  
+      // Then add AI suggestions with color palette
+      setMessages(prev => [
+        ...prev, 
+        { 
+          text: aiSuggestions, 
+          sender: "bot",
+          colorPalette: extractedPalette.length > 0 ? extractedPalette : newPalette,
+          heading: "Design Suggestions"
+        }
+      ]);
     } catch (error) {
       console.error("Error fetching data:", error);
       setMessages((prev) => [
