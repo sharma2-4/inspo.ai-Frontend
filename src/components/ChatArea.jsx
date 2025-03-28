@@ -2,16 +2,53 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Loader2, Send, PanelLeft, PanelRight, Sliders, 
-  Download, ExternalLink, Wand2, Image as ImageIcon, 
-  FileText, FileArchive, X, Copy, Check,
-  Moon, Sun, Search, Filter, Info
+  Download, ExternalLink, Filter, X, Building2
 } from "lucide-react";
 
+// Utility function to make links clickable
 const makeLinksClickable = (html) => {
   return html.replace(
     /<a\s+href="([^"]+)"(?![^>]*target=)/g,
     '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">$1</a>'
   );
+};
+
+// Skeleton Loading Component
+const MessageSkeleton = () => {
+  return (
+    <div className="p-4 bg-gray-900 rounded-2xl animate-pulse">
+      <div className="flex space-x-4">
+        <div className="flex-1 space-y-4">
+          <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+          <div className="h-4 bg-gray-700 rounded w-5/6"></div>
+          <div className="h-4 bg-gray-700 rounded w-2/3"></div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Typing Animation Component
+const TypingText = ({ text, speed = 20 }) => {
+  const [displayedText, setDisplayedText] = useState('');
+
+  useEffect(() => {
+    if (text) {
+      let i = 0;
+      const typingEffect = setInterval(() => {
+        if (i < text.length) {
+          setDisplayedText(prevText => prevText + text.charAt(i));
+          i++;
+        } else {
+          clearInterval(typingEffect);
+        }
+      }, speed);
+
+      return () => clearInterval(typingEffect);
+    }
+  }, [text, speed]);
+
+  return <>{displayedText}</>;
 };
 
 export default function ChatArea({
@@ -33,32 +70,41 @@ export default function ChatArea({
   setImageStyle,
   imageStyleOptions,
   colorPalette,
-  includeAI,
-  setIncludeAI,
-  addMessage
 }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [copiedColor, setCopiedColor] = useState(null);
   const messagesContainerRef = useRef(null);
+  const [typedMessages, setTypedMessages] = useState({});
 
-  // Scroll to bottom effect
+  // Auto-scroll effect
   useEffect(() => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Input Validation and Enhancement
+  // Typing management for AI messages
+  useEffect(() => {
+    const unTypedAIMessages = messages.filter(
+      msg => msg.sender === 'ai' && !typedMessages[msg.id]
+    );
+
+    unTypedAIMessages.forEach(msg => {
+      setTypedMessages(prev => ({
+        ...prev,
+        [msg.id]: true
+      }));
+    });
+  }, [messages]);
+
   const isSubmitDisabled = () => {
     if (loading) return true;
     const trimmedInput = input.trim();
     return trimmedInput.length === 0 || trimmedInput.length > 500;
   };
 
-  // Tooltip Component for Advanced Explanations
   const Tooltip = ({ content, children }) => {
     const [isVisible, setIsVisible] = useState(false);
-
     return (
       <div className="relative inline-block">
         <div 
@@ -76,7 +122,6 @@ export default function ChatArea({
     );
   };
 
-  // Enhanced Error and Guidance Handling
   const renderInputFeedback = () => {
     const trimmedInput = input.trim();
     if (trimmedInput.length > 500) {
@@ -89,46 +134,55 @@ export default function ChatArea({
     return null;
   };
 
-  const generateFreepikAIImage = async () => {
-    if (!input.trim()) return;
-    try {
-      const response = await fetch(
-        `/search?q=${encodeURIComponent(input)}&ai=true`
-      );
-      const data = await response.json();
-      const newMessage = {
-        sender: "bot",
-        images: data.images,
-        text: data.aiSuggestions,
-        heading: data.heading,
-        colorPalette: data.colorPalette,
-      };
-      addMessage(newMessage);
-      setInput("");
-    } catch (error) {
-      console.error("Error generating Freepik AI image:", error);
-    }
-  };
+  const renderIndustryInsights = (insights) => {
+    if (!insights || !insights.industriesWithImages) return null;
 
-  const handleSubmit = () => {
-    if (includeAI) {
-      generateFreepikAIImage();
-    } else {
-      sendMessage();
-    }
+    return (
+      <div className="space-y-6 mt-6">
+        <h2 className="text-2xl font-bold text-white mb-4">Industry Design Insights</h2>
+        {insights.industriesWithImages.map((industrySection, index) => (
+          <div key={index} className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
+            <div className="flex items-center mb-4">
+              <Building2 size={24} className="mr-3 text-blue-400" />
+              <h3 className="text-xl font-semibold text-white">{industrySection.industry}</h3>
+            </div>
+            
+            {industrySection.images && industrySection.images.length > 0 && (
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {industrySection.images.map((image, imgIndex) => (
+                  <img 
+                    key={imgIndex}
+                    src={image.image} 
+                    alt={image.title} 
+                    className="rounded-lg object-cover w-full h-32"
+                    onClick={() => handleImagePreview(image)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+        
+        {insights.insights && (
+          <div 
+            className="prose prose-invert max-w-none leading-relaxed break-words whitespace-pre-wrap"
+            dangerouslySetInnerHTML={{ 
+              __html: makeLinksClickable(insights.insights) 
+            }}
+          />
+        )}
+      </div>
+    );
   };
 
   const handleDownload = useCallback((image) => {
     const link = document.createElement('a');
     link.href = image.image;
-    
-    // Generate a more descriptive filename
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const sanitizedTitle = image.title 
       ? image.title.replace(/[^a-z0-9]/gi, '_').toLowerCase() 
       : 'inspoai_image';
     
-    // Determine download details based on image type
     if (image.format === 'vector') {
       link.href = image.url;
       link.download = `${sanitizedTitle}_vector_${timestamp}.svg`;
@@ -138,7 +192,6 @@ export default function ChatArea({
     } else {
       link.download = `${sanitizedTitle}_${timestamp}.jpg`;
     }
-
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -179,56 +232,42 @@ export default function ChatArea({
     );
   };
 
-  const renderFormatGrid = (images, categoryTitle) => {
+  const renderFormatGrid = (images) => {
     if (!images || images.length === 0) return null;
     
-    const imagesByCategory = images.reduce((acc, img) => {
-      const category = img.category || "Inspiration";
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(img);
-      return acc;
-    }, {});
-
     return (
       <div className="space-y-6">
-        {categoryTitle && (
-          <h3 className="text-lg font-bold text-white mb-2">{categoryTitle}</h3>
-        )}
-        {Object.entries(imagesByCategory).map(([category, categoryImages]) => (
+        {Object.entries(
+          images.reduce((acc, img) => {
+            const category = img.category || "Inspiration";
+            if (!acc[category]) acc[category] = [];
+            acc[category].push(img);
+            return acc;
+          }, {})
+        ).map(([category, imgs]) => (
           <div key={category} className="space-y-2">
-            <h4 className="text-sm font-medium text-gray-400">{category}</h4>
+            <h3 className="text-lg font-bold text-white mb-2">{category}</h3>
             <div className={`grid gap-3 ${
               moodboardLayout === "masonry" 
                 ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3" 
                 : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4"
             }`}>
-              {categoryImages.map((image, idx) => (
+              {imgs.map((image, idx) => (
                 <div 
                   key={idx} 
-                  className={`${
-                    moodboardLayout === "masonry" && idx % 3 === 0 ? "row-span-2" : ""
-                  } relative group`}
+                  className={`relative group ${moodboardLayout === "masonry" && idx % 3 === 0 ? "row-span-2" : ""}`}
+                  onClick={() => handleImagePreview(image)}
                 >
-                  <div 
-                    className="cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => handleImagePreview(image)}
-                  >
-                    <img 
-                      src={image.image} 
-                      alt={image.title} 
-                      className="rounded-lg object-cover w-full h-full"
-                    />
-                    {image.format && image.format !== 'image' && (
-                      <div className="absolute top-2 right-2 bg-black bg-opacity-70 rounded-full px-2 py-1 text-xs font-bold">
-                        {image.format.toUpperCase()}
-                      </div>
-                    )}
-                    {image.author && (
-                      <div className="absolute bottom-2 left-2 right-2 text-xs bg-black bg-opacity-70 p-1 rounded truncate">
-                        {image.author}
-                      </div>
-                    )}
-                  </div>
+                  <img 
+                    src={image.image} 
+                    alt={image.title} 
+                    className="rounded-lg object-cover w-full h-full"
+                  />
+                  {image.format && image.format !== 'image' && (
+                    <div className="absolute top-2 right-2 bg-black bg-opacity-70 rounded-full px-2 py-1 text-xs font-bold">
+                      {image.format.toUpperCase()}
+                    </div>
+                  )}
                   <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <div className="flex space-x-2">
                       <button 
@@ -260,10 +299,8 @@ export default function ChatArea({
     );
   };
 
-  // Image Preview Modal
   const ImagePreviewModal = () => {
     if (!selectedImage) return null;
-
     return (
       <div 
         className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4"
@@ -279,13 +316,11 @@ export default function ChatArea({
           >
             <X size={24} className="text-white" />
           </button>
-          
           <img 
             src={selectedImage.image} 
             alt={selectedImage.title} 
             className="max-w-full max-h-full object-contain rounded-lg"
           />
-          
           <div className="mt-4 text-center text-white space-x-4">
             <button 
               onClick={() => handleDownload(selectedImage)}
@@ -304,7 +339,6 @@ export default function ChatArea({
               </a>
             )}
           </div>
-          
           {selectedImage.author && (
             <div className="text-center text-gray-300 mt-2">
               Author: {selectedImage.author}
@@ -315,21 +349,8 @@ export default function ChatArea({
     );
   };
 
-  // Dynamic Placeholder Text
-  const getPlaceholderText = () => {
-    if (includeAI) {
-      return "Describe the AI image you want to generate (e.g., 'Futuristic cityscape at sunset')";
-    }
-    return "Describe the design you're looking for (e.g., 'Minimalist workspace design')";
-  };
-
-  const formatAIMessage = (text) => {
-    return makeLinksClickable(text);
-  };
-
   return (
     <div className="flex-1 flex flex-col h-full bg-gradient-to-b from-black to-gray-900">
-      {/* Title Bar */}
       <div className="p-4 border-b border-gray-800 bg-black flex items-center justify-between">
         <button
           onClick={() => setShowSidebar(!showSidebar)}
@@ -347,20 +368,7 @@ export default function ChatArea({
           <Sliders size={20} />
         </button>
       </div>
-
-      {/* Mode Indicator Bar */}
-      {includeAI && (
-        <div className="bg-blue-900 bg-opacity-30 border-b border-blue-700 py-2 px-4 flex items-center justify-center space-x-2">
-          <Wand2 size={16} className="text-blue-400" />
-          <span className="text-sm text-blue-300 font-medium">AI Image Generation Mode Active</span>
-        </div>
-      )}
-
-      {/* Messages Container */}
-      <div 
-        ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4"
-      >
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg, index) => (
           <motion.div
             key={index}
@@ -381,27 +389,36 @@ export default function ChatArea({
             {msg.text && (
               <div
                 className="prose prose-invert max-w-none leading-relaxed break-words whitespace-pre-wrap"
-                dangerouslySetInnerHTML={{
-                  __html: msg.sender === "bot" ? formatAIMessage(msg.text) : msg.text,
+                dangerouslySetInnerHTML={{ 
+                  __html: msg.sender === 'ai' 
+                    ? makeLinksClickable(`<p>${
+                      typedMessages[msg.id] 
+                        ? msg.text 
+                        : <TypingText text={msg.text} />
+                    }</p>`)
+                    : makeLinksClickable(msg.text)
                 }}
               />
             )}
             {msg.images && (
               <div className="mt-5">
-                {renderFormatGrid(msg.images, msg.categoryTitle)}
+                {renderFormatGrid(msg.images)}
               </div>
             )}
+            {msg.industryInsights && renderIndustryInsights(msg.industryInsights)}
           </motion.div>
         ))}
+        
         {loading && (
-          <div className="flex justify-center p-4">
-            <Loader2 className="animate-spin text-white w-8 h-8" />
+          <div className="space-y-4">
+            <MessageSkeleton />
+            <MessageSkeleton />
           </div>
         )}
+        
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Input Container */}
+      
       <div className="p-4 border-t border-gray-800 bg-black">
         <AnimatePresence>
           {showAdvancedOptions && (
@@ -421,7 +438,6 @@ export default function ChatArea({
                       value={moodboardLayout}
                       onChange={(e) => setMoodboardLayout(e.target.value)}
                       className="mt-1 w-full bg-black text-white p-2 rounded-full text-sm border border-gray-800"
-                      disabled={includeAI}
                     >
                       <option value="grid">Standard Grid</option>
                       <option value="masonry">Masonry</option>
@@ -433,7 +449,6 @@ export default function ChatArea({
                       value={imageStyle}
                       onChange={(e) => setImageStyle(e.target.value)}
                       className="mt-1 w-full bg-black text-white p-2 rounded-full text-sm border border-gray-800"
-                      disabled={includeAI}
                     >
                       {imageStyleOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -443,64 +458,29 @@ export default function ChatArea({
                     </select>
                   </div>
                 </div>
-                
-                <div className="mt-4 p-3 border border-blue-800 rounded-lg bg-blue-900 bg-opacity-20">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Wand2 size={18} className="text-blue-400" />
-                      <label htmlFor="includeAI" className="text-sm font-medium text-blue-300">
-                        AI Image Generation
-                      </label>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        id="includeAI"
-                        checked={includeAI}
-                        onChange={(e) => setIncludeAI(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                  {includeAI && (
-                    <div className="mt-2 text-xs text-blue-300">
-                      When enabled, only AI-generated images will be shown. Regular moodboard creation will be disabled.
-                    </div>
-                  )}
-                </div>
-                
                 <div className="mt-3">
                   <label className="text-xs text-gray-300">Asset Types</label>
                   <div className="flex gap-2 mt-1">
                     <button className="px-3 py-1 bg-blue-800 text-xs rounded-full">Images</button>
-                    <button className={`px-3 py-1 text-xs rounded-full border ${includeAI ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-black border-gray-700 hover:bg-gray-800'}`} disabled={includeAI}>Vectors</button>
-                    <button className={`px-3 py-1 text-xs rounded-full border ${includeAI ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-black border-gray-700 hover:bg-gray-800'}`} disabled={includeAI}>PSD</button>
+                    <button className="px-3 py-1 text-xs rounded-full border bg-black border-gray-700 hover:bg-gray-800">Vectors</button>
+                    <button className="px-3 py-1 text-xs rounded-full border bg-black border-gray-700 hover:bg-gray-800">PSD</button>
                   </div>
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-        
-        {/* Input Area */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder={getPlaceholderText()}
-              className={`w-full bg-black text-white p-3 pl-10 rounded-full focus:ring-2 focus:ring-white placeholder-gray-500 resize-none h-12 max-h-32 min-h-12 border ${
-                includeAI ? "border-blue-600 focus:border-blue-400 focus:ring-blue-400" : "border-gray-800"
-              }`}
+              placeholder="Describe the design you're looking for (e.g., 'Minimalist workspace design')"
+              className="w-full bg-black text-white p-3 pl-10 rounded-full focus:ring-2 focus:ring-white placeholder-gray-500 resize-none h-12 max-h-32 min-h-12 border border-gray-800"
               maxLength={500}
             />
-            {includeAI ? (
-              <Wand2 size={16} className="absolute left-4 top-3 text-blue-400" />
-            ) : (
-              <Filter size={16} className="absolute left-4 top-3 text-gray-500" />
-            )}
+            <Filter size={16} className="absolute left-4 top-3 text-gray-500" />
           </div>
           <Tooltip 
             content={
@@ -510,22 +490,16 @@ export default function ChatArea({
             }
           >
             <button
-              onClick={handleSubmit}
+              onClick={sendMessage}
               disabled={isSubmitDisabled()}
-              className={`bg-gradient-to-r text-black p-3 rounded-full flex items-center justify-center disabled:opacity-50 ${
-                includeAI
-                  ? "from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700"
-                  : "from-white to-gray-500 hover:from-gray-500 hover:to-white"
-              }`}
+              className="bg-gradient-to-r from-white to-gray-500 hover:from-gray-500 hover:to-white text-black p-3 rounded-full flex items-center justify-center disabled:opacity-50"
             >
-              {includeAI ? <Wand2 size={20} /> : <Send size={20} />}
+              <Send size={20} />
             </button>
           </Tooltip>
         </div>
         {renderInputFeedback()}
       </div>
-
-      {/* Image Preview Modal */}
       {selectedImage && <ImagePreviewModal />}
     </div>
   );
