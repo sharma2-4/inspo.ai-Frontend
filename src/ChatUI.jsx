@@ -5,7 +5,6 @@ import { AnimatePresence } from "framer-motion";
 import DesignSettingsSidebar from "./components/DesignSettingsSidebar";
 import ChatArea from "./components/ChatArea";
 import MoodboardPreview from "./components/MoodboardPreview";
-import DesignCanvas from "./components/DesignCanvas"; // Import the new component
 
 import {
   Send,
