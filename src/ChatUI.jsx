@@ -46,7 +46,7 @@ export default function Dashboard() {
   const [showMoodboardPreview, setShowMoodboardPreview] = useState(false);
   const [moodboardLayout, setMoodboardLayout] = useState("grid");
   const [imageStyle, setImageStyle] = useState("natural");
-  const [apiEndpoint, setApiEndpoint] = useState("http://localhost:3000");
+  const [apiEndpoint, setApiEndpoint] = useState("https://inspo-ai-backend.onrender.com");
   const [assetTypes, setAssetTypes] = useState({
     images: true,
     vectors: false,
