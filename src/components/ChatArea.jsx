@@ -5,7 +5,7 @@ import {
   Download, ExternalLink, Filter, X, Building2,
   Plus, CheckCircle, Layout
 } from "lucide-react";
-import DesignCanvas from "./DesignCanvas";
+
 
 // Utility function to make links clickable
 const makeLinksClickable = (html) => {
