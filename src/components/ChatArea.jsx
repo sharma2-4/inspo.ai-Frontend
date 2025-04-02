@@ -1,9 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Loader2, Send, PanelLeft, PanelRight, Sliders, 
-  Download, ExternalLink, Filter, X, Building2
+import {
+  Loader2, Send, PanelLeft, PanelRight,
+  Download, ExternalLink, Filter, X, Building2,
+  Plus, CheckCircle, Layout
 } from "lucide-react";
+import DesignCanvas from "./DesignCanvas";
 
 // Utility function to make links clickable
 const makeLinksClickable = (html) => {
@@ -60,21 +62,33 @@ export default function ChatArea({
   sendMessage,
   showSidebar,
   setShowSidebar,
-  showAdvancedOptions,
-  setShowAdvancedOptions,
-  relatedTerms,
   messagesEndRef,
-  moodboardLayout,
-  setMoodboardLayout,
-  imageStyle,
-  setImageStyle,
-  imageStyleOptions,
   colorPalette,
+  selectedImages = [],  // Array of selected images for the canvas
+  toggleImageSelection,
 }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [copiedColor, setCopiedColor] = useState(null);
   const messagesContainerRef = useRef(null);
   const [typedMessages, setTypedMessages] = useState({});
+
+  // Canvas-related state
+  const [showCanvas, setShowCanvas] = useState(false);
+  const [canvasImages, setCanvasImages] = useState([]);
+  const [canvasColorPalette, setCanvasColorPalette] = useState(colorPalette || []);
+
+  // Update canvas color palette when colorPalette changes
+  useEffect(() => {
+    if (colorPalette && colorPalette.length > 0) {
+      setCanvasColorPalette(prev => {
+        // Avoid duplicates
+        const newColors = colorPalette.filter(color =>
+          !prev.includes(color)
+        );
+        return [...prev, ...newColors];
+      });
+    }
+  }, [colorPalette]);
 
   // Auto-scroll effect
   useEffect(() => {
@@ -103,11 +117,32 @@ export default function ChatArea({
     return trimmedInput.length === 0 || trimmedInput.length > 500;
   };
 
+  const handleAddToCanvas = (image) => {
+    setCanvasImages(prev => [...prev, image]);
+    toggleImageSelection(image);
+  };
+
+  const handleExtractColor = (colors) => {
+    if (colors && colors.length > 0) {
+      setCanvasColorPalette(prev => {
+        // Avoid duplicates
+        const newColors = colors.filter(color =>
+          !prev.includes(color)
+        );
+        return [...prev, ...newColors];
+      });
+
+      // Visual feedback
+      setCopiedColor(colors[0]);
+      setTimeout(() => setCopiedColor(null), 2000);
+    }
+  };
+
   const Tooltip = ({ content, children }) => {
     const [isVisible, setIsVisible] = useState(false);
     return (
       <div className="relative inline-block">
-        <div 
+        <div
           onMouseEnter={() => setIsVisible(true)}
           onMouseLeave={() => setIsVisible(false)}
         >
@@ -146,28 +181,29 @@ export default function ChatArea({
               <Building2 size={24} className="mr-3 text-blue-400" />
               <h3 className="text-xl font-semibold text-white">{industrySection.industry}</h3>
             </div>
-            
+
             {industrySection.images && industrySection.images.length > 0 && (
-              <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                 {industrySection.images.map((image, imgIndex) => (
-                  <img 
-                    key={imgIndex}
-                    src={image.image} 
-                    alt={image.title} 
-                    className="rounded-lg object-cover w-full h-32"
-                    onClick={() => handleImagePreview(image)}
-                  />
+                  <div className="relative group" key={imgIndex}>
+                    <img
+                      src={image.image}
+                      alt={image.title}
+                      className="rounded-lg object-cover w-full h-32 cursor-pointer"
+                      onClick={() => handleImagePreview(image)}
+                    />
+                  </div>
                 ))}
               </div>
             )}
           </div>
         ))}
-        
+
         {insights.insights && (
-          <div 
+          <div
             className="prose prose-invert max-w-none leading-relaxed break-words whitespace-pre-wrap"
-            dangerouslySetInnerHTML={{ 
-              __html: makeLinksClickable(insights.insights) 
+            dangerouslySetInnerHTML={{
+              __html: makeLinksClickable(insights.insights)
             }}
           />
         )}
@@ -179,10 +215,10 @@ export default function ChatArea({
     const link = document.createElement('a');
     link.href = image.image;
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const sanitizedTitle = image.title 
-      ? image.title.replace(/[^a-z0-9]/gi, '_').toLowerCase() 
+    const sanitizedTitle = image.title
+      ? image.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()
       : 'inspoai_image';
-    
+
     if (image.format === 'vector') {
       link.href = image.url;
       link.download = `${sanitizedTitle}_vector_${timestamp}.svg`;
@@ -213,8 +249,8 @@ export default function ChatArea({
       <div className="flex flex-wrap gap-2 mt-3 mb-4">
         {colors.map((color, index) => (
           <div key={index} className="flex flex-col items-center">
-            <div 
-              className="w-12 h-12 rounded-full border border-gray-700 shadow-lg cursor-pointer hover:scale-110 transition-transform relative group" 
+            <div
+              className="w-12 h-12 rounded-full border border-gray-700 shadow-lg cursor-pointer hover:scale-110 transition-transform relative group"
               style={{ backgroundColor: color }}
               title={`Copy Color: ${color}`}
               onClick={() => handleColorCopy(color)}
@@ -224,6 +260,18 @@ export default function ChatArea({
                   Copied!
                 </div>
               )}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleExtractColor([color]);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 p-1 rounded-full"
+                  title="Add to Canvas"
+                >
+                  <Plus size={14} className="text-white" />
+                </button>
+              </div>
             </div>
             <span className="text-xs mt-1 font-mono">{color}</span>
           </div>
@@ -234,7 +282,7 @@ export default function ChatArea({
 
   const renderFormatGrid = (images) => {
     if (!images || images.length === 0) return null;
-    
+
     return (
       <div className="space-y-6">
         {Object.entries(
@@ -247,40 +295,49 @@ export default function ChatArea({
         ).map(([category, imgs]) => (
           <div key={category} className="space-y-2">
             <h3 className="text-lg font-bold text-white mb-2">{category}</h3>
-            <div className={`grid gap-3 ${
-              moodboardLayout === "masonry" 
-                ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3" 
-                : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4"
-            }`}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {imgs.map((image, idx) => (
-                <div 
-                  key={idx} 
-                  className={`relative group ${moodboardLayout === "masonry" && idx % 3 === 0 ? "row-span-2" : ""}`}
-                  onClick={() => handleImagePreview(image)}
+                <div
+                  key={idx}
+                  className={`relative group ${idx % 3 === 0 ? "row-span-2" : ""}`}
                 >
-                  <img 
-                    src={image.image} 
-                    alt={image.title} 
-                    className="rounded-lg object-cover w-full h-full"
+                  <img
+                    src={image.image}
+                    alt={image.title}
+                    className="rounded-lg object-cover w-full h-full cursor-pointer"
+                    onClick={() => handleImagePreview(image)}
                   />
                   {image.format && image.format !== 'image' && (
-                    <div className="absolute top-2 right-2 bg-black bg-opacity-70 rounded-full px-2 py-1 text-xs font-bold">
+                    <div className="absolute top-2 left-2 bg-black bg-opacity-70 rounded-full px-2 py-1 text-xs font-bold">
                       {image.format.toUpperCase()}
                     </div>
                   )}
-                  <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <div className="flex space-x-2">
-                      <button 
-                        onClick={() => handleDownload(image)}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddToCanvas(image);
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 p-1 rounded-full backdrop-blur-sm"
+                        title="Add to Moodboard"
+                      >
+                        <Plus size={16} className="text-white" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(image);
+                        }}
                         className="bg-white/20 hover:bg-white/40 p-1 rounded-full backdrop-blur-sm"
                         title="Download"
                       >
                         <Download size={16} className="text-white" />
                       </button>
                       {image.url && (
-                        <a 
-                          href={image.url} 
-                          target="_blank" 
+                        <a
+                          href={image.url}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="bg-white/20 hover:bg-white/40 p-1 rounded-full backdrop-blur-sm"
                           title="Open Original"
@@ -301,37 +358,71 @@ export default function ChatArea({
 
   const ImagePreviewModal = () => {
     if (!selectedImage) return null;
+
+    // Function to check if the image is already selected
+    const isImageSelected = () => {
+      return selectedImages.some(img =>
+        (img.image && selectedImage.image && img.image === selectedImage.image) ||
+        (img.url && selectedImage.url && img.url === selectedImage.url) ||
+        (img.image && selectedImage.url && img.image === selectedImage.url) ||
+        (img.url && selectedImage.image && img.url === selectedImage.image)
+      );
+    };
+
+    // Get image source with fallback
+    const imageSrc = selectedImage.image || selectedImage.url;
+
     return (
-      <div 
+      <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4"
         onClick={() => setSelectedImage(null)}
       >
-        <div 
+        <div
           className="max-w-4xl max-h-[90vh] relative"
           onClick={(e) => e.stopPropagation()}
         >
-          <button 
+          <button
             onClick={() => setSelectedImage(null)}
             className="absolute top-2 right-2 bg-white/20 hover:bg-white/40 p-2 rounded-full z-60"
           >
             <X size={24} className="text-white" />
           </button>
-          <img 
-            src={selectedImage.image} 
-            alt={selectedImage.title} 
-            className="max-w-full max-h-full object-contain rounded-lg"
-          />
+
+          {imageSrc && (
+            <img
+              src={imageSrc}
+              alt={selectedImage.title || 'Image preview'}
+              className="max-w-full max-h-full object-contain rounded-lg"
+            />
+          )}
+
           <div className="mt-4 text-center text-white space-x-4">
-            <button 
+            <button
+              onClick={() => {
+                toggleImageSelection(selectedImage);
+              }}
+              className={`px-4 py-2 rounded-full inline-flex items-center ${isImageSelected()
+                ? 'bg-green-600 hover:bg-green-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+            >
+              {isImageSelected()
+                ? <><CheckCircle size={20} className="mr-2" /> Added to Moodboard</>
+                : <><Plus size={20} className="mr-2" /> Add to Moodboard</>
+              }
+            </button>
+
+            <button
               onClick={() => handleDownload(selectedImage)}
               className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-full inline-flex items-center"
             >
               <Download size={20} className="mr-2" /> Download
             </button>
+
             {selectedImage.url && (
-              <a 
-                href={selectedImage.url} 
-                target="_blank" 
+              <a
+                href={selectedImage.url}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-full inline-flex items-center"
               >
@@ -339,6 +430,7 @@ export default function ChatArea({
               </a>
             )}
           </div>
+
           {selectedImage.author && (
             <div className="text-center text-gray-300 mt-2">
               Author: {selectedImage.author}
@@ -348,6 +440,7 @@ export default function ChatArea({
       </div>
     );
   };
+
 
   return (
     <div className="flex-1 flex flex-col h-full bg-gradient-to-b from-black to-gray-900">
@@ -359,14 +452,17 @@ export default function ChatArea({
         >
           {showSidebar ? <PanelLeft size={20} /> : <PanelRight size={20} />}
         </button>
-        <img src="/inspoai.svg" alt="Inspo.ai" className="h-8 w-auto"/>
-        <button
-          onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
-          className="p-2 rounded-full hover:bg-gray-800 border border-gray-800"
-          title="Advanced Options"
-        >
-          <Sliders size={20} />
-        </button>
+        <img src="/inspoai.svg" alt="Inspo.ai" className="h-8 w-auto" />
+        {selectedImages.length > 0 ? (
+          <button
+            onClick={() => setShowCanvas(true)}
+            className="flex items-center space-x-1 text-sm text-gray-400 hover:text-white transition-colors duration-200"
+          >
+            <span>{selectedImages.length} selected</span>
+          </button>
+        ) : (
+          <div className="w-10"></div> /* Empty div for symmetry when no images selected */
+        )}
       </div>
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg, index) => (
@@ -389,13 +485,12 @@ export default function ChatArea({
             {msg.text && (
               <div
                 className="prose prose-invert max-w-none leading-relaxed break-words whitespace-pre-wrap"
-                dangerouslySetInnerHTML={{ 
-                  __html: msg.sender === 'ai' 
-                    ? makeLinksClickable(`<p>${
-                      typedMessages[msg.id] 
-                        ? msg.text 
-                        : <TypingText text={msg.text} />
-                    }</p>`)
+                dangerouslySetInnerHTML={{
+                  __html: msg.sender === 'ai'
+                    ? makeLinksClickable(`<p>${typedMessages[msg.id]
+                      ? msg.text
+                      : <TypingText text={msg.text} />
+                      }</p>`)
                     : makeLinksClickable(msg.text)
                 }}
               />
@@ -408,68 +503,18 @@ export default function ChatArea({
             {msg.industryInsights && renderIndustryInsights(msg.industryInsights)}
           </motion.div>
         ))}
-        
+
         {loading && (
           <div className="space-y-4">
             <MessageSkeleton />
             <MessageSkeleton />
           </div>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
-      
+
       <div className="p-4 border-t border-gray-800 bg-black">
-        <AnimatePresence>
-          {showAdvancedOptions && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="mb-4 overflow-hidden"
-            >
-              <div className="bg-gray-900 p-4 rounded-2xl border border-gray-800">
-                <h3 className="text-sm font-bold mb-2">Advanced Options</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-300">Layout Style</label>
-                    <select
-                      value={moodboardLayout}
-                      onChange={(e) => setMoodboardLayout(e.target.value)}
-                      className="mt-1 w-full bg-black text-white p-2 rounded-full text-sm border border-gray-800"
-                    >
-                      <option value="grid">Standard Grid</option>
-                      <option value="masonry">Masonry</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-300">Image Style</label>
-                    <select
-                      value={imageStyle}
-                      onChange={(e) => setImageStyle(e.target.value)}
-                      className="mt-1 w-full bg-black text-white p-2 rounded-full text-sm border border-gray-800"
-                    >
-                      {imageStyleOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label className="text-xs text-gray-300">Asset Types</label>
-                  <div className="flex gap-2 mt-1">
-                    <button className="px-3 py-1 bg-blue-800 text-xs rounded-full">Images</button>
-                    <button className="px-3 py-1 text-xs rounded-full border bg-black border-gray-700 hover:bg-gray-800">Vectors</button>
-                    <button className="px-3 py-1 text-xs rounded-full border bg-black border-gray-700 hover:bg-gray-800">PSD</button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <textarea
@@ -482,10 +527,10 @@ export default function ChatArea({
             />
             <Filter size={16} className="absolute left-4 top-3 text-gray-500" />
           </div>
-          <Tooltip 
+          <Tooltip
             content={
-              isSubmitDisabled() 
-                ? "Please enter a valid input (1-500 characters)" 
+              isSubmitDisabled()
+                ? "Please enter a valid input (1-500 characters)"
                 : "Send your request"
             }
           >
@@ -500,7 +545,15 @@ export default function ChatArea({
         </div>
         {renderInputFeedback()}
       </div>
-      {selectedImage && <ImagePreviewModal />}
+
+      {/* Canvas Component */}
+      <DesignCanvas
+        isOpen={showCanvas}
+        onClose={() => setShowCanvas(false)}
+        colorPalette={canvasColorPalette}
+        onExtractColor={handleExtractColor}
+        selectedImages={selectedImages}
+      />
     </div>
   );
 }
