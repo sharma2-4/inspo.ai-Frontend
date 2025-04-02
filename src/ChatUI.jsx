@@ -5,6 +5,7 @@ import { AnimatePresence } from "framer-motion";
 import DesignSettingsSidebar from "./components/DesignSettingsSidebar";
 import ChatArea from "./components/ChatArea";
 import MoodboardPreview from "./components/MoodboardPreview";
+import DesignCanvas from "./components/DesignCanvas"; // Import the new component
 
 import {
   Send,
@@ -15,6 +16,7 @@ import {
   PanelLeft,
   PanelRight,
   Sliders,
+  Layout,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -63,6 +65,10 @@ export default function Dashboard() {
     vectors: false,
     psd: false
   });
+  
+  // Canvas-related state
+  const [showCanvas, setShowCanvas] = useState(false);
+  const [extractedColors, setExtractedColors] = useState([]);
 
   // Refs
   const colorPickerRef = useRef(null);
@@ -150,6 +156,23 @@ export default function Dashboard() {
       ...prev,
       [type]: !prev[type]
     }));
+  };
+
+  // Handle colors extracted from the canvas
+  const handleExtractColors = (colors) => {
+    if (colors && colors.length > 0) {
+      setExtractedColors(prev => {
+        // Avoid duplicates
+        const newColors = colors.filter(color => !prev.includes(color));
+        return [...prev, ...newColors];
+      });
+      
+      // Also add to the main color palette
+      setColorPalette(prev => {
+        const newColors = colors.filter(color => !prev.includes(color));
+        return [...prev, ...newColors];
+      });
+    }
   };
 
   // Send user message + fetch data
@@ -261,14 +284,42 @@ export default function Dashboard() {
   };
 
   // Toggle selection for moodboard
+  // Add this improved toggleImageSelection function to your Dashboard.jsx
+
   const toggleImageSelection = (image) => {
     setSelectedImages((prev) => {
-      const imageExists = prev.some((img) => img.image === image.image);
-      return imageExists
-        ? prev.filter((img) => img.image !== image.image)
-        : [...prev, image];
-    });
-  };
+      // Check if this image already exists in the selection
+      const imageExists = prev.some((img) => 
+        (img.image && image.image && img.image === image.image) ||
+        (img.url && image.url && img.url === image.url) ||
+        (img.image && image.url && img.image === image.url) ||
+        (img.url && image.image && img.url === image.image)
+      );
+      
+      // If image exists, remove it; otherwise add it
+      if (imageExists) {
+        return prev.filter((img) => !(
+          (img.image && image.image && img.image === image.image) ||
+          (img.url && image.url && img.url === image.url) ||
+          (img.image && image.url && img.image === image.url) ||
+          (img.url && image.image && img.url === image.image)
+        ));
+      } else {
+        // Normalize the image object to have both image and url properties if possible
+        const normalizedImage = { 
+          ...image,
+          image: image.image || image.url,
+          url: image.url || image.image
+        };
+        return [...prev, normalizedImage];  
+    }
+  });
+  
+  // Optionally open the canvas automatically when adding an image
+  if (!showCanvas) {
+    setShowCanvas(true);
+  }
+};
 
   // Download moodboard
   const downloadMoodboard = async () => {
@@ -333,6 +384,8 @@ export default function Dashboard() {
         fontOptions={fontOptions}
         designStyleOptions={designStyleOptions}
         exportColorPalette={exportColorPalette}
+        showCanvas={showCanvas}
+        extractedColors={extractedColors}
       />
 
       {/* Main Chat Area */}
@@ -360,6 +413,8 @@ export default function Dashboard() {
         hasInteractiveElements={hasInteractiveElements}
         toggleImageSelection={toggleImageSelection}
         selectedImages={selectedImages}
+        showCanvas={showCanvas}
+        setShowCanvas={setShowCanvas}
       />
 
       {/* Moodboard Preview */}
