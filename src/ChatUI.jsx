@@ -5,20 +5,9 @@ import { AnimatePresence } from "framer-motion";
 import DesignSettingsSidebar from "./components/DesignSettingsSidebar";
 import ChatArea from "./components/ChatArea";
 import MoodboardPreview from "./components/MoodboardPreview";
-import {
-  Send,
-  Loader2,
-  X,
-  Download,
-  Palette,
-  PanelLeft,
-  PanelRight,
-  Sliders,
-  Layout,
-} from "lucide-react";
 
 export default function Dashboard() {
-  // State for messages
+
   const [messages, setMessages] = useState([
     {
       text: "Hello! I'll help you create a design moodboard. What kind of project are you working on?",
